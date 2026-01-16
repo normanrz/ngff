@@ -638,16 +638,81 @@ Additional keys MAY be added, following the key naming rules.
 
 ### HCS metadata
 
-High content screening data is commonly composed of multiple multiscale images ("well") that are arranged in a grid on a "plate".
-Additional metadata for organizing the wells on a plate is introduced here.
+High content screening data is commonly composed of multiple multiscale images ("fields of view") that are arranged in a grid on a "plate".
+Wells are intermediate containers that hold one or more fields of view at specific plate positions.
+This section defines the `plate` and `well` attributes for organizing HCS data within the collection framework.
 
-TODO:
-Open questions Joel:
-How do we relate derived data to existing data best in the HCS context without becoming a nesting nightmare?
+#### Changes from previous HCS specification
 
-We have a well with X images. All of the images can have labels and tables. And maybe one would use the collection spec to allow for labels that apply to multiple images in the same well or tables that apply to multiple images.
+This proposal integrates HCS metadata into the collection framework, replacing the previous dedicated plate and well metadata structure. Key changes include:
 
-How do we represent images in wells that can optionally be related to labels and optionally be related to tables? Does the well always contain a nested collection (we called that “the OME-Zarr container”, e.g. the object that knows about the image data, label data and related table data like ROI tables in our work so far)? Or is it sometimes nested, sometimes not?
+- **Plate as collection**: Plates are now represented as collections with a `plate` attribute, rather than using a separate `plate` metadata key. The `wells` array is replaced by the collection's `nodes` array.
+- **Wells as nested collections**: Wells are represented as nested collection nodes with a `well` attribute, rather than using a separate `well` metadata key. The `images` array is replaced by the well collection's `nodes` array.
+- **ID-based references**: Rows, columns, and acquisitions are now referenced by string IDs (matching `[a-zA-Z0-9-_.]+`) instead of by name or integer index. IDs must be unique within the JSON document.
+- **ISO 8601 timestamps**: Acquisition timestamps (`startTime`, `endTime`) now use ISO 8601 format instead of epoch milliseconds.
+- **Flexible paths**: Well and image paths are no longer constrained to the `{row}/{column}` folder hierarchy. Any valid path can be used.
+
+#### Plate attribute
+
+The `plate` attribute SHOULD be present in the `attributes` of a collection that represents an HCS plate.
+If present, the value of the `plate` attribute MUST be an object with the following fields:
+
+| Field | Type | Required? | Notes |
+| - | - | - | - |
+| `"rows"` | array of objects | yes | Rows of the plate. See below. |
+| `"columns"` | array of objects | yes | Columns of the plate. See below. |
+| `"acquisitions"` | array of objects | no | Acquisitions for this plate. See below. |
+| `"name"` | string | no | A name identifying the plate. |
+| `"fieldCount"` | integer | no | Maximum number of fields per view across all wells. MUST be a positive integer. |
+
+##### Row and column objects
+
+Row and column objects define the structure of the plate grid.
+
+| Field | Type | Required? | Notes |
+| - | - | - | - |
+| `"id"` | string | yes | Value MUST be a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
+| `"name"` | string | no | A human-readable name for the row or column. |
+
+Row and column IDs are used to identify well positions. Typical conventions include letters for rows (A, B, C, ...) and numbers for columns (1, 2, 3, ...), but any alphanumeric ID is permitted.
+
+##### Acquisition objects
+
+Acquisitions represent distinct imaging sessions or experimental conditions. If multiple acquisitions exist, each image in a well MUST reference one of these acquisitions.
+
+| Field | Type | Required? | Notes |
+| - | - | - | - |
+| `"id"` | string | yes | Value MUST be a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
+| `"name"` | string | no | A name identifying this acquisition. |
+| `"maximumFieldCount"` | integer | no | Maximum number of fields of view in any well for this acquisition. MUST be a positive integer. |
+| `"startTime"` | string | no | Timestamp in ISO 8601 format when acquisition started. |
+| `"endTime"` | string | no | Timestamp in ISO 8601 format when acquisition ended. |
+
+#### Well attribute
+
+The `well` attribute SHOULD be present in the `attributes` of a collection node that represents a well within a plate.
+If present, the value of the `well` attribute MUST be an object with the following fields:
+
+| Field | Type | Required? | Notes |
+| - | - | - | - |
+| `"row"` | string | yes | Value MUST match an `id` in the plate's `rows` array. |
+| `"column"` | string | yes | Value MUST match an `id` in the plate's `columns` array. |
+| `"acquisition"` | string | no | Value MUST match an `id` in the plate's `acquisitions` array. REQUIRED if the plate has multiple acquisitions. |
+
+Nodes within a well collection represent fields of view (images).
+
+#### Sparse plates
+
+Plates MAY be sparse, meaning not all possible row/column combinations need to have a corresponding well.
+Similarly, wells MAY be sparse, meaning not all possible fields of view need to be present.
+Implementations SHOULD handle missing wells or images gracefully.
+
+#### Derived data in HCS context
+
+Within the HCS framework, derived data such as label images and tables can be associated with fields of view.
+Each well is represented as a nested collection that contains the primary images as well as any derived data.
+The `labels` attribute (defined in the [Label maps section](#label-maps-and-other-derived-images)) can be used to denote label images within wells.
+Future RFCs may define additional mechanisms for tables and other derived data types.
 
 #### Example
 ```jsonc
@@ -658,46 +723,101 @@ How do we represent images in wells that can optionally be related to labels and
         "name": "hcs-plate-001",
         "attributes": {
             "plate": {
-                "acquisitions": [...],
-                "columns": [...],
-                "rows": [...],
+                "name": "My Experiment Plate",
+                "rows": [
+                    { "id": "A" },
+                    { "id": "B" }
+                ],
+                "columns": [
+                    { "id": "1" },
+                    { "id": "2" },
+                    { "id": "3" }
+                ],
+                "acquisitions": [
+                    {
+                        "id": "acq_0",
+                        "name": "Initial acquisition",
+                        "startTime": "2021-12-20T11:13:20Z"
+                    },
+                    {
+                        "id": "acq_1",
+                        "name": "Follow-up acquisition",
+                        "startTime": "2021-12-21T15:00:00Z"
+                    }
+                ],
+                "fieldCount": 4
             }
-        }
+        },
         "nodes": [
             {
-            "type": "collection",
-            "name": "well A01",
-            "attributes": {
-                "well": {
-                    "column": 1,
-                    "row": "A",
-                    "acquisition": 0
-                }
-            }
-            "nodes": [
-                {
-                    "type": "multiscale",
-                    "name": "well-001-001",
-                    "path": {
-                      "type": "zarr",
-                      "path": "./A/01/001.img.zarr"
+                "type": "collection",
+                "name": "A1",
+                "attributes": {
+                    "well": {
+                        "row": "A",
+                        "column": "1",
+                        "acquisition": "acq_0"
                     }
                 },
-                {
-                    "type": "multiscale",
-                    "name": "A01_0_nuclei",
-                    "path": {
-                      "type": "zarr",
-                      "path": "/full/path/A/01/nuclei.img.zarr"
+                "nodes": [
+                    {
+                        "type": "multiscale",
+                        "name": "field_0",
+                        "path": {
+                            "type": "zarr",
+                            "path": "./A/1/0"
+                        }
                     },
-                    "attributes": {
-                        "labels": {}
+                    {
+                        "type": "multiscale",
+                        "name": "field_1",
+                        "path": {
+                            "type": "zarr",
+                            "path": "./A/1/1"
+                        }
+                    },
+                    {
+                        "type": "multiscale",
+                        "name": "nuclei_segmentation",
+                        "path": {
+                            "type": "zarr",
+                            "path": "./A/1/nuclei"
+                        },
+                        "attributes": {
+                            "labels": {
+                                "source": ["field_0", "field_1"],
+                                "labelAttributes": [
+                                    { "label-value": 1, "color": [255, 0, 0, 255] },
+                                    { "label-value": 2, "color": [0, 255, 0, 255] }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "type": "collection",
+                "name": "A2",
+                "attributes": {
+                    "well": {
+                        "row": "A",
+                        "column": "2",
+                        "acquisition": "acq_0"
                     }
                 },
-                ...
+                "nodes": [
+                    {
+                        "type": "multiscale",
+                        "name": "field_0",
+                        "path": {
+                            "type": "zarr",
+                            "path": "./A/2/0"
+                        }
+                    }
                 ]
-            }, 
-        ...]
+            }
+            // Additional wells omitted for brevity
+        ]
     }
 }
 ```
