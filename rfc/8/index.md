@@ -218,34 +218,54 @@ Images may be added as nodes to multiple collections.
 
 ### Metadata
 
+This RFC uses [JSON-LD](https://www.w3.org/TR/json-ld11/) (JSON for Linked Data) for defining object types, identifiers, and extensibility.
+JSON-LD is a lightweight syntax for expressing linked data that is fully compatible with JSON.
+Using JSON-LD provides a standardized mechanism for type definitions and namespace management.
+
+Note: This specification uses a hybrid approach. While `@type` and `@id` follow JSON-LD semantics, the `path` mechanism for referencing external resources is an OME-NGFF-specific extension that supports relative paths, local files, and different storage formats (Zarr, JSON) which are not part of standard JSON-LD linking.
+
+#### JSON-LD Context
+
+Every OME-NGFF metadata object MUST include a `@context` that defines the vocabulary used.
+The `@context` SHOULD be placed inside the `ome` object, scoping the JSON-LD semantics to the OME-NGFF metadata.
+The context maps terms to IRIs (Internationalized Resource Identifiers) and defines how the document should be interpreted.
+
+The OME-NGFF context is available at `https://ngff.openmicroscopy.org/0.6/context.jsonld` and defines:
+- Core node types (`Collection`, `Multiscale`, `Singlescale`)
+- Core path types (`zarr`, `json`)
+- Core attribute keys (`coordinateSystems`, `coordinateTransformations`, `labels`, `plate`, `well`)
+- Core coordinate transformation types and axis types from RFC-5
+
+Documents MAY include additional contexts for custom extensions. See [Extensibility](#extensibility) for details.
+
 #### `Node`
 
-This RFC defines a basic interface for a OME-Zarr metadata object, which we name `Node`.
+This RFC defines a basic interface for an OME-Zarr metadata object, which we name `Node`.
 Objects that implement `Node` have the following fields:
 
 | Field | Type | Required? | Notes |
 | - | - | - | - |
-| `"type"` | string | yes | Identifies the type of the node |
-| `"id"` | string | no | Value MUST be a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
+| `"@type"` | string | yes | Identifies the type of the node. Uses JSON-LD type semantics. |
+| `"@id"` | string | no | A unique identifier for this node. Uses JSON-LD identifier semantics. Value MUST be a valid IRI or a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
 | `"name"` | string | yes | Value MUST be a non-empty string. It SHOULD be a string that matches `[a-zA-Z0-9-_.]+`. Names MUST be unique within the enclosing collection. |
 | `"attributes"` | object | no | [See attributes section](#attributes) |
 
-The `type` field of a `Node` defines the additional fields, if any, it has. 
-This RFC defines three `Node` types: `Collection`, `Multiscale`, and `Singlescale`.
-Future RFCs might add more Node types, including custom Node types.
+The `@type` field of a `Node` defines the additional fields, if any, it has.
+This RFC defines three core `Node` types: `Collection`, `Multiscale`, and `Singlescale`.
+Custom node types can be added via JSON-LD contexts (see [Extensibility](#extensibility)).
 
 A `Node` object may be used as the root object of the `ome` key, in which case a `version` field, as defined in previous spec versions, is also required.
 Non-root `Node` objects SHOULD NOT have a `version` field and MUST NOT have a different `version` value than the root `Node`.
 
 #### `Collection` Node
 
-References a `Node` that is a collection of `Node`s. 
+References a `Node` that is a collection of `Node`s.
 Collections MAY be nested.
 
 | Field | Type | Required? | Notes |
 | - | - | - | - |
-| `"type"` | string | yes | Value MUST be `"collection"`. |
-| `"id"` | string | no | Value MUST be a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
+| `"@type"` | string | yes | Value MUST be `"Collection"`. |
+| `"@id"` | string | no | A unique identifier. Value MUST be a valid IRI or a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
 | `"name"` | string | yes | Value MUST be a non-empty string. It SHOULD be a string that matches `[a-zA-Z0-9-_.]+`. Names MUST be unique within the enclosing collection. |
 | `"nodes"` | array | no | Value MUST be an array of `Node` objects. |
 | `"path"` | object | no | Value MUST be a `Path` object. |
@@ -260,12 +280,12 @@ This new interface replaces the multiscale metadata defined in the previous vers
 
 | Field | Type | Required? | Notes |
 | - | - | - | - |
-| `"type"` | string | yes | Value MUST be `"multiscale"`. |
-| `"id"` | string | no | Value MUST be a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
+| `"@type"` | string | yes | Value MUST be `"Multiscale"`. |
+| `"@id"` | string | no | A unique identifier. Value MUST be a valid IRI or a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
 | `"name"` | string | yes | Value MUST be a non-empty string. It SHOULD be a string that matches `[a-zA-Z0-9-_.]+`. Names MUST be unique within one collections JSON file. |
 | `"nodes"` | array | no | Value MUST be an array of `Singlescale` objects. |
 | `"path"` | object | no | Value MUST be a `Path` object. |
-| `"attributes"` | string | no | Value MUST be a dictionary. [See attributes section](#attributes). |
+| `"attributes"` | object | no | Value MUST be a dictionary. [See attributes section](#attributes). |
 
 Either `"nodes"` or `"path"` MUST be present, but not both.
 
@@ -277,15 +297,15 @@ This new interface replaces the multiscale metadata defined in the previous vers
 
 | Field | Type | Required? | Notes |
 | - | - | - | - |
-| `"type"` | string | yes | Value MUST be `"multiscale"`. |
-| `"id"` | string | no | Value MUST be a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
+| `"@type"` | string | yes | Value MUST be `"Singlescale"`. |
+| `"@id"` | string | no | A unique identifier. Value MUST be a valid IRI or a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
 | `"name"` | string | yes | Value MUST be a non-empty string. It SHOULD be a string that matches `[a-zA-Z0-9-_.]+`. Names MUST be unique within one collections JSON file. |
 | `"path"` | object | no | Value MUST be a `Path` object. |
-| `"attributes"` | string | yes | Value MUST be a dictionary. [See attributes section](#attributes). |
+| `"attributes"` | object | yes | Value MUST be a dictionary. [See attributes section](#attributes). |
 
 `Singlescale` nodes MUST have a `coordinateTransformations` key in their `attributes` which conforms to the [coordinate transformations](#coordinate-transformations) specification and only contains `scale` and `translate` transformations.
 
-If the `Singlescale` node is the root node and contained within the `zarr.json` of a Zarr array, the `path` field SHOULD NOT be present. 
+If the `Singlescale` node is the root node and contained within the `zarr.json` of a Zarr array, the `path` field SHOULD NOT be present.
 In this case, the `Singlescale` describes the Zarr array.
 Otherwise, the `path` field MUST be present.
 
@@ -293,14 +313,18 @@ Otherwise, the `path` field MUST be present.
 
 This new interface replaces the paths defined in the previous versions of the OME-Zarr specification.
 
+Note: The `Path` object is an OME-NGFF-specific extension, not standard JSON-LD linking.
+It enables referencing resources via relative paths, local files, and different storage formats, which JSON-LD's IRI-based linking does not support.
+
 | Field | Type | Required? | Notes |
 | - | - | - | - |
-| `"type"` | string | yes | Value MUST be valid path type. |
+| `"@type"` | string | yes | Value MUST be a valid path type. |
 | `"path"` | string | yes | Value MUST be a string containing a path. See below. |
 
-The `type` field defines how the path is interpreted. Currently, the `zarr` and `json` types are supported. 
+The `@type` field defines how the path is interpreted. This RFC defines two core path types: `zarr` and `json`.
 The `"zarr"` type is used for paths that reference nodes in a Zarr array or group. Implementations need to append `zarr.json` to the path to access the metadata of the referenced node.
 The `"json"` type is used for paths that reference nodes in a JSON file.
+Custom path types can be added via JSON-LD contexts (see [Extensibility](#extensibility)).
 
 This `path` strings can be one of the following types:
 
@@ -319,23 +343,25 @@ This `path` strings can be one of the following types:
   To reference nodes that are stored remotely, URLs with the `http` or `https` scheme may be used.
   URLs follow the notation defined in [IETF RFC1738](https://datatracker.ietf.org/doc/html/rfc1738).
 
-Future RFCs may propose additional paths, such as S3 URLs or chained paths (e.g. for referencing files within a zip file).
 In any case, implementations may impose access restrictions on any type of paths.
 
 
 #### References
 
-Objects that are being referenced MUST have an `id` field.
+Objects that can be referenced MUST have an `@id` field.
 
-The reference can be a string with an ID for referencing objects within the same JSON document.
-For more complex references, the reference can be an object with the following fields:
+For references within the same JSON document, use a string containing the `@id` value of the target object.
+
+For external references, this specification extends JSON-LD with a custom mechanism that combines `@id` with a `Path` object:
 
 | Field | Type | Required? | Notes |
 | - | - | - | - |
-| `"id"` | string | yes | Value MUST be a string that matches `[a-zA-Z0-9-_.]+`. |
-| `"path"` | object | no | Value MUST be a `Path` object. |
+| `"@id"` | string | yes | Value MUST be a valid IRI or a string that matches `[a-zA-Z0-9-_.]+`. |
+| `"path"` | object | yes | Value MUST be a `Path` object pointing to the external document. |
 
-For external references, the `path` field MUST be present.
+When referencing an object in an external document, the `@id` refers to an object within that external document, and the `path` specifies how to locate and access the document.
+
+Note: This external reference mechanism is an OME-NGFF extension. Standard JSON-LD uses IRIs for linking, which doesn't support our requirements for relative paths and different storage formats.
 
 
 #### Attributes
@@ -343,68 +369,86 @@ For external references, the `path` field MUST be present.
 Each `Node` has an `attributes` field that can be populated with JSON metadata.
 A primary use case for the `attributes` field is the specialization of collections and nodes through additional metadata.
 
-Attribute keys follow the naming scheme described in [Extensibility](#extensibility): unprefixed keys are reserved for the core specification, while prefixed keys (e.g., `mobie:`, `neuroglancer:`, `fractal:`, `webknossos:`) allow custom metadata.
-
-Custom-prefixed keys can also be used to add additional sub-keys or behavior to existing unprefixed keys.
-This can be thought of as a way of achieving inheritance.
-For example, the `well` key could be specialized by a `fractal:well` key that adds additional sub-keys or alters behavior.
-It is out-of-scope of this RFC to fully define the inheritance behavior.
-That is left to be defined on a case-by-case basis for individual key specifications and may be standardized in a future RFC.
-
-Unprefixed attribute keys that are defined as part of this RFC are:
+Attribute keys are terms that can be mapped to IRIs via the JSON-LD context.
+The core OME-NGFF context defines the following attribute keys:
 - `coordinateSystems`
 - `coordinateTransformations`
 - `labels`, as well as `label-value` and `color` in label attributes
 - `plate` and `well`
 
+Custom attribute keys can be added by including additional JSON-LD contexts that define their meaning (see [Extensibility](#extensibility)).
+
 ### Extensibility
 
-Adding collections to OME-Zarr provides an opportunity to define extension points.
-Extension points allow the specification to be extended in a controlled manner, enabling custom functionality while maintaining interoperability.
+JSON-LD provides a powerful and standardized mechanism for extending OME-NGFF.
+Extensions are managed through JSON-LD contexts, which map terms to IRIs and define their semantics.
 
-#### Naming scheme
+#### How JSON-LD contexts work
 
-Extension identifiers follow a prefixed vs unprefixed convention:
+A JSON-LD context (`@context`) defines the vocabulary used in a document.
+The context maps short terms (like `Collection` or `plate`) to full IRIs that uniquely identify their meaning.
 
-- **Unprefixed identifiers** are reserved for the core specification and can only be added or modified through the RFC process.
-- **Prefixed identifiers** (separated by `:`) can be freely introduced by custom extensions without requiring an RFC. The prefix identifies the user or organization that introduces and maintains the extension. Prefixes SHOULD be registered in a central registry (a Github repository under the `ome` organization). Registration of a prefix claims maintainership for that prefix and provides a discoverable location for the specification of custom extensions.
-- The `ome:` prefix is reserved for official extensions that have not yet been incorporated into the core specification.
+The core OME-NGFF context at `https://ngff.openmicroscopy.org/0.6/context.jsonld` defines all core terms.
+To add custom extensions, the `@context` inside the `ome` object can include additional contexts:
 
-This naming scheme applies uniformly to all extension points listed below.
+```jsonc
+{
+    "ome": {
+        "@context": [
+            "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+            "https://mobie.github.io/context.jsonld"  // Custom extension context
+        ],
+        // ... rest of ome object
+    }
+}
+```
 
-Implementations SHOULD ignore extension identifiers they do not recognize, allowing graceful degradation when encountering unknown extensions.
+#### Adding custom extensions
 
-#### Extension points
+Custom extensions can define new node types, attribute keys, path types, and other terms by publishing a JSON-LD context.
+The context file maps the extension's terms to IRIs under a namespace controlled by the extension author.
 
-The following extension points are defined:
+**Custom terms SHOULD always use a prefix** (e.g., `mobie:grid` rather than `grid`) to clearly distinguish them from core OME-NGFF terms. This prevents naming collisions and makes it immediately clear which terms are extensions.
 
-##### Node types
+For example, the MoBIE project might publish a context at `https://mobie.github.io/context.jsonld`:
+```jsonc
+{
+    "@context": {
+        "mobie": "https://mobie.github.io/vocab#"
+    }
+}
+```
 
-The `type` field of a `Node` defines its structure and semantics. This RFC defines three unprefixed node types: `collection`, `multiscale`, and `singlescale`. Custom extensions can add prefixed node types (e.g., `mobie:table`, `fractal:roi`).
+This allows documents to use prefixed terms like `"@type": "mobie:Table"` or `"mobie:grid": true` when the MoBIE context is included.
 
-Implementations that do not recognize a node type SHOULD treat it as an opaque node and MAY skip it or display it with a generic representation.
+#### Extension registry
 
-##### Attribute keys
+Extension authors SHOULD register their context URLs in a central registry (a Github repository under the `ome` organization).
+Registration claims maintainership for the extension namespace and provides a discoverable location for documentation.
 
-Attribute keys within the `attributes` dictionary of nodes are an extension point. Custom extensions can add prefixed keys (e.g., `neuroglancer:shader`, `webknossos:settings`). See [Attributes](#attributes) for more details.
+The `ome:` namespace (`https://ngff.openmicroscopy.org/vocab#`) is reserved for official extensions that have not yet been incorporated into the core specification.
 
-##### Path types
+#### Hybrid approach: JSON-LD and OME-NGFF extensions
 
-The `type` field of a `Path` object defines how the path is interpreted. This RFC defines two unprefixed path types: `zarr` and `json`. Custom extensions can add prefixed path types for other storage protocols or access patterns (e.g., `myorg:s3`, `myorg:zip`).
+This specification uses JSON-LD for:
+- **Type definitions** (`@type`): Node types, transformation types, axis types
+- **Identifiers** (`@id`): Unique identifiers for nodes, coordinate systems, etc.
+- **Extensibility**: Custom contexts for adding new terms
 
-Implementations that do not recognize a path type SHOULD treat the referenced node as opaque and MAY skip it or display it with a generic representation.
+The following are OME-NGFF-specific extensions that use JSON-LD syntax but are not standard JSON-LD:
+- **Path objects**: The `Path` mechanism with `@type` (zarr, json) and `path` fields
+- **External references**: Combining `@id` with a `Path` object to reference objects in external documents
 
-##### Coordinate transformation types
+Path types like `zarr` and `json` are defined in the OME-NGFF context and can be extended, but the path resolution mechanism itself is specific to this specification.
 
-The `type` field of a coordinate transformation defines its mathematical operation. RFC-5 defines several unprefixed transformation types including `identity`, `scale`, `translation`, and others. Custom extensions can add prefixed transformation types (e.g., `myorg:nonlinear`).
+#### Graceful degradation
 
-Implementations that do not recognize a transformation type SHOULD report an error or skip the transformation, as applying an unknown transformation could lead to incorrect spatial interpretation.
-
-##### Coordinate system axis types
-
-The `type` field of an axis in a coordinate system defines its semantics. RFC-5 defines unprefixed axis types including `space`, `time`, and `channel`. Custom extensions can add prefixed axis types (e.g., `myorg:wavelength`).
-
-Implementations that do not recognize an axis type MAY treat it as an opaque dimension.
+Implementations SHOULD handle unknown terms gracefully:
+- **Unknown node types**: Treat as opaque nodes; MAY skip or display with a generic representation.
+- **Unknown path types**: Treat the referenced node as opaque; MAY skip or display with a generic representation.
+- **Unknown attribute keys**: MAY ignore or pass through to downstream consumers.
+- **Unknown transformation types**: SHOULD report an error or skip, as incorrect transformations could lead to spatial misinterpretation.
+- **Unknown axis types**: MAY treat as an opaque dimension.
 
 
 ### Examples
@@ -415,32 +459,33 @@ See more examples at https://github.com/normanrz/ngff-rfc8-collection-examples/.
 ```jsonc
 {
     "ome": {
-        "version": "0.x",
-        "type": "collection",
+        "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+        "version": "0.6",
+        "@type": "Collection",
         "name": "jrc_hela-1",
         "nodes": [{
             "name": "raw",
-            "type": "multiscale",
+            "@type": "Multiscale",
             "path": {
-              "type": "zarr",
-              "path": "./raw", // a relative or absolute path
+              "@type": "zarr",
+              "path": "./raw"  // a relative or absolute path
             },
-            "attributes": {    
+            "attributes": {
                 "example-viewer:settings": {
                     "isDisabled": true
-                },
-                ... // arbitrary user-defined metadata
-            },
+                }
+                // arbitrary user-defined metadata
+            }
         }, {
-            "name": "..",
-            "type": "collection",
+            "name": "nested",
+            "@type": "Collection",
             "path": {
-              "type": "json",
+              "@type": "json",
               "path": "./nested_collection.json"
             }
-        }, ... ],
+        }],
         "attributes": {
-            ...
+            // ...
         }
     }
 }
@@ -451,13 +496,14 @@ See more examples at https://github.com/normanrz/ngff-rfc8-collection-examples/.
 ```jsonc
 {
     "ome": {
-        "version": "0.x",
-        "type": "collection",
+        "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+        "version": "0.6",
+        "@type": "Collection",
         "name": "example",
         "attributes": {
             "coordinateSystems": [
                 {
-                  "id": "world",
+                  "@id": "world",
                   "name": "world",
                   "axes": [...]
                 }
@@ -465,18 +511,18 @@ See more examples at https://github.com/normanrz/ngff-rfc8-collection-examples/.
         },
         "nodes": [{
             "name": "raw",
-            "type": "multiscale",
+            "@type": "Multiscale",
             "nodes": [{
-                "id": "raw_0",
-                "type": "singlescale",
+                "@id": "raw_0",
+                "@type": "Singlescale",
                 "path": {
-                  "type": "zarr",
+                  "@type": "zarr",
                   "path": "./raw/0"
                 },
                 "attributes": {
                   "coordinateTransformations": [
                     {
-                      "type": "scale",
+                      "@type": "scale",
                       "scale": [1, 1, 1],
                       "input": "raw_0",
                       "output": "world"
@@ -484,7 +530,7 @@ See more examples at https://github.com/normanrz/ngff-rfc8-collection-examples/.
                   ]
                 }
             }, ...]
-        }, ... ]
+        }, ...]
     }
 }
 ```
@@ -495,42 +541,48 @@ A gallery view could also be represented within the proposed collection JSON as 
 
 Note that the grid view is modelled here as a collection of collections, where the collection at each grid position includes the raw EM image and the mitochondria segmentation label mask image.
 
-Also note some MoBIE specific attributes:
+Also note some MoBIE specific attributes (using prefixed keys as recommended):
 
-- `"mobie:grid": "true"` specifies that the data should be laid out in a grid.
-- `"mobie:voxelType": "intensities"` (or `"labels"`) specifies the voxel data type; in the future, we would propose that this information is encoded within the OME-Zarr images themselves, such that this attribute could be omitted.
-
-TODO: Replace `mobie:voxelType` with `labels`
+- `"mobie:grid": true` specifies that the data should be laid out in a grid.
+- `"mobie:voxelType": "intensities"` (or `"labels"`) specifies the voxel data type.
 
 ```jsonc
 {
     "ome": {
-        "version": "0.x",
-        "type": "collection",
+        "@context": [
+            "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+            {
+                "mobie": "https://mobie.github.io/vocab#"
+            }
+        ],
+        "version": "0.6",
+        "@type": "Collection",
         "name": "openorganelle-mito-gallery",
         "attributes": {
-            "mobie:grid": "true"
+            "mobie:grid": true
         },
         "nodes": [
             {
                 "name": "jrc_hela-3",
-                "type": "collection",
+                "@type": "Collection",
                 "nodes": [
                     {
-                        "type": "multiscale",
+                        "name": "em",
+                        "@type": "Multiscale",
                         "path": {
-                          "type": "zarr",
-                          "path": "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_hela-3/jrc_hela-3.zarr/em/fibsem-uint16",
+                          "@type": "zarr",
+                          "path": "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_hela-3/jrc_hela-3.zarr/em/fibsem-uint16"
                         },
                         "attributes": {
                             "mobie:voxelType": "intensities"
                         }
                     },
                     {
-                        "type": "multiscale",
+                        "name": "mito_seg",
+                        "@type": "Multiscale",
                         "path": {
-                          "type": "zarr",
-                          "path": "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_hela-3/jrc_hela-3.zarr/labels/mito_seg",
+                          "@type": "zarr",
+                          "path": "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_hela-3/jrc_hela-3.zarr/labels/mito_seg"
                         },
                         "attributes": {
                             "mobie:voxelType": "labels"
@@ -540,12 +592,13 @@ TODO: Replace `mobie:voxelType` with `labels`
             },
             {
                 "name": "jrc_macrophage-2",
-                "type": "collection",
+                "@type": "Collection",
                 "nodes": [
                     {
-                        "type": "multiscale",
+                        "name": "em",
+                        "@type": "Multiscale",
                         "path": {
-                          "type": "zarr",
+                          "@type": "zarr",
                           "path": "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_macrophage-2/jrc_macrophage-2.zarr/em/fibsem-uint16"
                         },
                         "attributes": {
@@ -553,9 +606,10 @@ TODO: Replace `mobie:voxelType` with `labels`
                         }
                     },
                     {
-                        "type": "multiscale",
+                        "name": "mito_seg",
+                        "@type": "Multiscale",
                         "path": {
-                          "type": "zarr",
+                          "@type": "zarr",
                           "path": "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_macrophage-2/jrc_macrophage-2.zarr/labels/mito_seg"
                         },
                         "attributes": {
@@ -566,12 +620,13 @@ TODO: Replace `mobie:voxelType` with `labels`
             },
             {
                 "name": "jrc_jurkat-1",
-                "type": "collection",
+                "@type": "Collection",
                 "nodes": [
                     {
-                        "type": "multiscale",
+                        "name": "em",
+                        "@type": "Multiscale",
                         "path": {
-                          "type": "zarr",
+                          "@type": "zarr",
                           "path": "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_jurkat-1/jrc_jurkat-1.zarr/em/fibsem-uint16"
                         },
                         "attributes": {
@@ -579,9 +634,10 @@ TODO: Replace `mobie:voxelType` with `labels`
                         }
                     },
                     {
-                        "type": "multiscale",
+                        "name": "mito_seg",
+                        "@type": "Multiscale",
                         "path": {
-                          "type": "zarr",
+                          "@type": "zarr",
                           "path": "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_jurkat-1/jrc_jurkat-1.zarr/labels/mito_seg"
                         },
                         "attributes": {
@@ -632,24 +688,25 @@ Additional keys MAY be added, following the key naming rules.
 ```jsonc
 {
     "ome": {
-        "version": "0.x",
-        "type": "collection",
+        "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+        "version": "0.6",
+        "@type": "Collection",
         "name": "label-example",
-        "attributes": { ... }
+        "attributes": { ... },
         "nodes": [{
-            "id": "raw",
+            "@id": "raw",
             "name": "raw",
-            "type": "multiscale",
+            "@type": "Multiscale",
             "nodes": [ ... ]
         }, {
             "name": "nuclei",
-            "type": "multiscale",
+            "@type": "Multiscale",
             "nodes": [ ... ],
             "attributes": {
                 "labels": {
                     "source": [ "raw" ],
                     "labelAttributes": [{
-                        "label-value": 1, // TODO: kebab-case is inconsistent
+                        "label-value": 1,
                         "color": [ 255, 0, 0, 255 ]
                     }, {
                         "label-value": 2,
@@ -664,66 +721,68 @@ Additional keys MAY be added, following the key naming rules.
 
 ### HCS metadata
 
-High content screening data is commonly composed of multiple multiscale images ("well") that are arranged in a grid on a "plate".
-Additional metadata for organizing the wells on a plate is introduced here.
-
-TODO:
-Open questions Joel:
-How do we relate derived data to existing data best in the HCS context without becoming a nesting nightmare?
-
-We have a well with X images. All of the images can have labels and tables. And maybe one would use the collection spec to allow for labels that apply to multiple images in the same well or tables that apply to multiple images.
-
-How do we represent images in wells that can optionally be related to labels and optionally be related to tables? Does the well always contain a nested collection (we called that “the OME-Zarr container”, e.g. the object that knows about the image data, label data and related table data like ROI tables in our work so far)? Or is it sometimes nested, sometimes not?
+High content screening data is commonly composed of multiple multiscale images ("fields of view") that are arranged in a grid on a "plate".
+Wells are intermediate containers that hold one or more fields of view at specific plate positions.
+This section defines the `plate` and `well` attributes for organizing HCS data within the collection framework.
 
 #### Example
 ```jsonc
 {
     "ome": {
-        "version": "0.x",
-        "type": "collection",
+        "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+        "version": "0.6",
+        "@type": "Collection",
         "name": "hcs-plate-001",
         "attributes": {
             "plate": {
-                "acquisitions": [...],
-                "columns": [...],
-                "rows": [...],
+                "name": "My Experiment Plate",
+                "rows": [
+                    { "@id": "row_A" },
+                    { "@id": "row_B" }
+                ],
+                "columns": [
+                    { "@id": "col_1" },
+                    { "@id": "col_2" }
+                ],
+                "acquisitions": [
+                    { "@id": "acq_0", "name": "Initial acquisition" }
+                ]
             }
-        }
+        },
         "nodes": [
             {
-            "type": "collection",
-            "name": "well A01",
-            "attributes": {
-                "well": {
-                    "column": 1,
-                    "row": "A",
-                    "acquisition": 0
-                }
-            }
-            "nodes": [
-                {
-                    "type": "multiscale",
-                    "name": "well-001-001",
-                    "path": {
-                      "type": "zarr",
-                      "path": "./A/01/001.img.zarr"
+                "@type": "Collection",
+                "name": "A1",
+                "attributes": {
+                    "well": {
+                        "row": "row_A",
+                        "column": "col_1",
+                        "acquisition": "acq_0"
                     }
                 },
-                {
-                    "type": "multiscale",
-                    "name": "A01_0_nuclei",
-                    "path": {
-                      "type": "zarr",
-                      "path": "/full/path/A/01/nuclei.img.zarr"
+                "nodes": [
+                    {
+                        "@type": "Multiscale",
+                        "name": "field_0",
+                        "path": {
+                            "@type": "zarr",
+                            "path": "./A/1/0"
+                        }
                     },
-                    "attributes": {
-                        "labels": {}
+                    {
+                        "@type": "Multiscale",
+                        "name": "nuclei",
+                        "path": {
+                            "@type": "zarr",
+                            "path": "./A/1/nuclei"
+                        },
+                        "attributes": {
+                            "labels": {}
+                        }
                     }
-                },
-                ...
                 ]
-            }, 
-        ...]
+            }
+        ]
     }
 }
 ```
@@ -745,65 +804,66 @@ In this layout, `coordinateTransformation` define relationships between differen
 {
   "coordinateTransformations": [
     {
-      "type": "translation",
+      "@type": "translation",
       "translation": [0, 0, 100],
-      "input": "image_1", // references collection node ID
-      "output": "world" // references coordinate system ID
+      "input": "image_1",  // references collection node @id
+      "output": "world"    // references coordinate system @id
     }
   ]
 }
 ```
 
-In a change from the previous specification, coordinate systems are referenced using the Reference interface, i.e. via IDs, and not via names.
+In a change from the previous specification, coordinate systems are referenced using `@id`, following JSON-LD conventions.
 
 ```jsonc
 {
   "ome": {
-    "version": "0.x",
-    "type": "collection",
-    "name": "hcs-plate-001",
+    "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+    "version": "0.6",
+    "@type": "Collection",
+    "name": "tiled-image",
     "attributes": {
       "coordinateSystems": [
         {
-          "id": "world",
+          "@id": "world",
           "name": "world",
           "axes": [...]
         }
       ],
       "coordinateTransformations": [
         {
-          "type": "translation",
+          "@type": "translation",
           "translation": [0, 0, 100],
-          "input": "tile_0",  // references collection node ID
-          "output": "world"  // references coordinate system ID
+          "input": "tile_0",   // references collection node @id
+          "output": "world"    // references coordinate system @id
         },
         {
-          "type": "translation",
+          "@type": "translation",
           "translation": [100, 0, 0],
-          "input": "tile_1",  // references collection node ID
-          "output": "world"  // references coordinate system ID
+          "input": "tile_1",   // references collection node @id
+          "output": "world"    // references coordinate system @id
         }
       ]
     },
     "nodes": [
       {
-        "type": "multiscale",
-        "id": "tile_0",
+        "@type": "Multiscale",
+        "@id": "tile_0",
         "name": "tile_0",
         "path": {
-          "type": "zarr",
+          "@type": "zarr",
           "path": "./tile_0.zarr"
         }
-      }, 
+      },
       {
-        "type": "multiscale",
-        "id": "tile_1",
+        "@type": "Multiscale",
+        "@id": "tile_1",
         "name": "tile_1",
         "path": {
-          "type": "zarr",
+          "@type": "zarr",
           "path": "./tile_1.zarr"
         }
-      },
+      }
     ]
   }
 }
@@ -815,24 +875,24 @@ The `coordinateSystems` attribute is an array of objects with the following fiel
 
 | Field | Type | Required? | Notes |
 | - | - | - | - |
-| `"id"` | string | no | Value MUST be a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
+| `"@id"` | string | no | A unique identifier. Value MUST be a valid IRI or a string that matches `[a-zA-Z0-9-_.]+`. IDs MUST be unique within the JSON document. |
 | `"name"` | string | yes | Value MUST be a non-empty string. As defined in RFC-5. |
-| `"axes"` | array of strings | yes | Value MUST be an array of axes, as defined in RFC-5. |
+| `"axes"` | array of objects | yes | Value MUST be an array of axes, as defined in RFC-5. |
 
 
-#### Coordinate transforms
+#### Coordinate transformation objects
 
-The `coordinateTransformations` field is an array of objects with the following fields:
+The `coordinateTransformations` attribute is an array of objects with the following fields:
 
 | Field | Type | Required? | Notes |
 | - | - | - | - |
-| `"type"` | string | yes | Value MUST be a valid coordinate transform type, as defined in RFC-5. |
-| `"input"` | string | yes | Value MUST be a reference to the input coordinate system. |
-| `"output"` | string | yes | Value MUST be a reference to the input coordinate system. |
+| `"@type"` | string | yes | Value MUST be a valid coordinate transform type, as defined in RFC-5. |
+| `"input"` | string | yes | Value MUST be a reference (`@id`) to the input coordinate system or node. |
+| `"output"` | string | yes | Value MUST be a reference (`@id`) to the output coordinate system. |
 
 Additional fields MAY be added as required by the transform type.
 
-Please note that the semantics of the `input` and `output` fields are changed from by-name to by-reference (ID or reference object) compared to RFC-5
+Please note that the semantics of the `input` and `output` fields are changed from by-name to by-reference (`@id`) compared to RFC-5.
 
 
 ### Where is this collection metadata stored?
@@ -847,14 +907,15 @@ This is particularly useful for defining the nodes that are stored within a Zarr
     "node_type": "group",
     "attributes": {
         "ome": {
-            "version": "0.x",
-            "type": "collection",
+            "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+            "version": "0.6",
+            "@type": "Collection",
             "name": "zarr.json-example",
             "nodes": [{
-                "type": "multiscale",
+                "@type": "Multiscale",
                 "name": "image1",
                 "path": {
-                  "type": "zarr",
+                  "@type": "zarr",
                   "path": "./image1.img.zarr"  // reference to a Zarr group
                 }
             }, ...]
@@ -863,21 +924,23 @@ This is particularly useful for defining the nodes that are stored within a Zarr
 }
 ```
 
-Collection metadata may also be stored in a standalone json files that are stored in arbitrary locations and have a file name ending in `.json`.
+Collection metadata may also be stored in standalone JSON files that are stored in arbitrary locations and have a file name ending in `.json`.
 Here, the metadata is stored in the `ome` key of the root object.
-Standalone files are useful for persisting groupings of images that may or may not be stored on in the same folder hierarchy.
+Standalone files are useful for persisting groupings of images that may or may not be stored in the same folder hierarchy.
 
-### Example
+#### Example
 ```jsonc
 {
     "ome": {
-        "version": "0.x",
-        "type": "collection",
+        "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+        "version": "0.6",
+        "@type": "Collection",
         "name": "standalone-example",
         "nodes": [{
-            "type": "multiscale",
+            "@type": "Multiscale",
+            "name": "image1",
             "path": {
-              "type": "zarr",
+              "@type": "zarr",
               "path": "https://example.com/image1.img.zarr"
             }
         }, ...]
