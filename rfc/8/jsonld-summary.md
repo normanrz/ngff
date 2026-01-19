@@ -9,10 +9,11 @@ This document summarizes the adoption of JSON-LD in RFC-8, including benefits, c
 - Types are mapped to IRIs via contexts, ensuring global uniqueness
 - Standard tooling exists for validating and processing JSON-LD documents
 
-### Standardized Identifiers
+### Standardized Identifiers and References
 - `@id` provides a consistent way to define and reference objects
 - Identifiers can be simple strings or full IRIs
-- References within and across documents use the same mechanism
+- Context can define properties as references (`"@type": "@id"`), allowing simple string syntax while maintaining proper semantics
+- JSON-LD processors understand which properties are references vs. literals
 
 ### Extensibility via Contexts
 - Extensions are managed through JSON-LD contexts (`@context`)
@@ -57,15 +58,30 @@ This document summarizes the adoption of JSON-LD in RFC-8, including benefits, c
 | `"id": "world"` | `"@id": "world"` |
 | `"type": "translation"` | `"@type": "translation"` |
 
+### Internal References
+Reference properties like `input`, `output`, and `source` are defined in the context with `"@type": "@id"`:
+```jsonc
+// In the context file:
+{
+    "@context": {
+        "input": {"@type": "@id"},
+        "output": {"@type": "@id"},
+        "source": {"@type": "@id"}
+    }
+}
+```
+
+This means JSON-LD processors understand that string values are references to `@id` values, not literals.
+
 ### Document Structure
 - Added `@context` inside the `ome` object (required)
-- Context references `https://ngff.openmicroscopy.org/0.6/context.jsonld`
+- Context references `https://ngff.openmicroscopy.org/0.x/context.jsonld`
 - Custom extensions add additional contexts to the array
 
 ### Extensibility
-- Replaced custom prefix registry concept with JSON-LD contexts
-- Custom terms use prefixes (e.g., `mobie:grid` instead of `grid`)
-- Extensions publish context files at URLs
+- JSON-LD contexts replace the custom prefix registry concept
+- Custom terms SHOULD always use prefixes (e.g., `mobie:grid` instead of `grid`)
+- Extensions define a prefix for their namespace in the context array
 
 ### Example: Before
 ```jsonc
@@ -90,8 +106,8 @@ This document summarizes the adoption of JSON-LD in RFC-8, including benefits, c
 ```jsonc
 {
     "ome": {
-        "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
-        "version": "0.6",
+        "@context": "https://ngff.openmicroscopy.org/0.x/context.jsonld",
+        "version": "0.x",
         "@type": "Collection",
         "name": "example",
         "nodes": [{
@@ -106,6 +122,31 @@ This document summarizes the adoption of JSON-LD in RFC-8, including benefits, c
 }
 ```
 
+### Example: Custom Extensions
+```jsonc
+{
+    "ome": {
+        "@context": [
+            "https://ngff.openmicroscopy.org/0.x/context.jsonld",
+            { "mobie": "https://mobie.github.io/vocab#" }
+        ],
+        "@type": "Collection",
+        "attributes": {
+            "mobie:grid": true,           // Custom attribute
+            "mobie:voxelType": "labels"   // Custom attribute
+        },
+        "nodes": [{
+            "@type": "mobie:Table",       // Custom node type
+            "name": "measurements",
+            "path": {
+                "@type": "mobie:parquet", // Custom path type
+                "path": "./measurements.parquet"
+            }
+        }]
+    }
+}
+```
+
 ## Hybrid Approach: What's JSON-LD vs. OME-NGFF-Specific
 
 ### Standard JSON-LD
@@ -114,6 +155,7 @@ This document summarizes the adoption of JSON-LD in RFC-8, including benefits, c
 - `@id` - identifiers
 - Prefix expansion (e.g., `mobie:grid` → `https://mobie.github.io/vocab#grid`)
 - Scoped contexts for differentiating types in different locations
+- Reference properties defined with `"@type": "@id"` (e.g., `input`, `output`, `source`)
 
 ### OME-NGFF Extensions (Not Standard JSON-LD)
 - **Path objects**: The `path` mechanism with `@type` (zarr, json) and `path` field
@@ -161,11 +203,11 @@ This inconsistency exists because path and transform types feel more like "forma
 #### Path Object `@type`
 The `@type` in path objects uses JSON-LD syntax but isn't really a JSON-LD type - it's our custom path type system. This could confuse users who expect JSON-LD semantics.
 
-#### References
-- Internal references: just a string (`"input": "tile_0"`)
-- External references: object with `@id` and `path`
+#### External References
+- Internal references: string with context-defined `"@type": "@id"` (standard JSON-LD)
+- External references: object with `@id` and `path` (OME-NGFF extension)
 
-This asymmetry exists for practical reasons but differs from pure JSON-LD where `@id` would be an IRI.
+This asymmetry exists because standard JSON-LD linking (IRIs) doesn't support our requirements for relative paths and different storage formats. Internal references use proper JSON-LD semantics via context definitions.
 
 ### Migration
 - Existing RFC-8 implementations would need updates
@@ -175,7 +217,7 @@ This asymmetry exists for practical reasons but differs from pure JSON-LD where 
 ## Recommendations
 
 1. **Clear documentation**: Explicitly document what's JSON-LD vs. OME-NGFF-specific
-2. **Versioned context URLs**: Use versioned URLs (e.g., `/0.6/context.jsonld`) to prevent breakage
+2. **Versioned context URLs**: Use versioned URLs (e.g., `/0.x/context.jsonld`) to prevent breakage
 3. **Provide context file**: Publish the actual context file, not just documentation
 4. **Tooling**: Provide OME-NGFF-specific validators that understand the hybrid approach
 5. **Examples**: Include many examples showing common patterns

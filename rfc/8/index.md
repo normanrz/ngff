@@ -230,11 +230,12 @@ Every OME-NGFF metadata object MUST include a `@context` that defines the vocabu
 The `@context` SHOULD be placed inside the `ome` object, scoping the JSON-LD semantics to the OME-NGFF metadata.
 The context maps terms to IRIs (Internationalized Resource Identifiers) and defines how the document should be interpreted.
 
-The OME-NGFF context is available at `https://ngff.openmicroscopy.org/0.6/context.jsonld` and defines:
+The OME-NGFF context is available at `https://ngff.openmicroscopy.org/0.x/context.jsonld` and defines:
 - Core node types (`Collection`, `Multiscale`, `Singlescale`)
-- Core path types (`zarr`, `json`)
+- Core path types (`zarr`, `json`) via scoped contexts
 - Core attribute keys (`coordinateSystems`, `coordinateTransformations`, `labels`, `plate`, `well`)
 - Core coordinate transformation types and axis types from RFC-5
+- Reference properties (`input`, `output`, `source`) as `"@type": "@id"` so that string values are treated as references
 
 Documents MAY include additional contexts for custom extensions. See [Extensibility](#extensibility) for details.
 
@@ -254,7 +255,7 @@ The `@type` field of a `Node` defines the additional fields, if any, it has.
 This RFC defines three core `Node` types: `Collection`, `Multiscale`, and `Singlescale`.
 Custom node types can be added via JSON-LD contexts (see [Extensibility](#extensibility)).
 
-A `Node` object may be used as the root object of the `ome` key, in which case a `version` field, as defined in previous spec versions, is also required.
+A `Node` object may be used as the root object of the `ome` key, in which case a `version` field, as defined in previous spec versions, and a `@context` field are also required.
 Non-root `Node` objects SHOULD NOT have a `version` field and MUST NOT have a different `version` value than the root `Node`.
 
 #### `Collection` Node
@@ -351,6 +352,27 @@ In any case, implementations may impose access restrictions on any type of paths
 Objects that can be referenced MUST have an `@id` field.
 
 For references within the same JSON document, use a string containing the `@id` value of the target object.
+The OME-NGFF context defines reference properties (such as `input`, `output`, `source`) with `"@type": "@id"`, which tells JSON-LD processors that these string values are references, not literals.
+
+```jsonc
+// In the context file:
+{
+    "@context": {
+        "input": {"@type": "@id"},
+        "output": {"@type": "@id"},
+        "source": {"@type": "@id"}
+    }
+}
+```
+
+This allows simple syntax in documents while maintaining proper JSON-LD semantics:
+```jsonc
+{
+    "@type": "translation",
+    "input": "tile_0",   // JSON-LD knows this references @id "tile_0"
+    "output": "world"    // JSON-LD knows this references @id "world"
+}
+```
 
 For external references, this specification extends JSON-LD with a custom mechanism that combines `@id` with a `Path` object:
 
@@ -383,43 +405,40 @@ Custom attribute keys can be added by including additional JSON-LD contexts that
 JSON-LD provides a powerful and standardized mechanism for extending OME-NGFF.
 Extensions are managed through JSON-LD contexts, which map terms to IRIs and define their semantics.
 
-#### How JSON-LD contexts work
+#### Custom extensions
 
-A JSON-LD context (`@context`) defines the vocabulary used in a document.
-The context maps short terms (like `Collection` or `plate`) to full IRIs that uniquely identify their meaning.
+A JSON-LD context (`@context`) defines the vocabulary used in a document, mapping short terms (like `Collection` or `plate`) to full IRIs that uniquely identify their meaning.
+The core OME-NGFF context at `https://ngff.openmicroscopy.org/0.x/context.jsonld` defines all core terms.
 
-The core OME-NGFF context at `https://ngff.openmicroscopy.org/0.6/context.jsonld` defines all core terms.
-To add custom extensions, the `@context` inside the `ome` object can include additional contexts:
+Custom extensions can define new node types, attribute keys, path types, and other terms.
+To add a custom extension, include an additional context that defines a prefix for your namespace:
 
 ```jsonc
 {
     "ome": {
         "@context": [
-            "https://ngff.openmicroscopy.org/0.6/context.jsonld",
-            "https://mobie.github.io/context.jsonld"  // Custom extension context
+            "https://ngff.openmicroscopy.org/0.x/context.jsonld",
+            { "mobie": "https://mobie.github.io/vocab#" }
         ],
-        // ... rest of ome object
+        "@type": "Collection",
+        "attributes": {
+            "mobie:grid": true,           // Custom attribute
+            "mobie:voxelType": "labels"   // Custom attribute
+        },
+        "nodes": [{
+            "@type": "mobie:Table",       // Custom node type
+            "name": "measurements",
+            "path": {
+                "@type": "mobie:parquet", // Custom path type
+                "path": "./measurements.parquet"
+            }
+        }]
     }
 }
 ```
 
-#### Adding custom extensions
-
-Custom extensions can define new node types, attribute keys, path types, and other terms by publishing a JSON-LD context.
-The context file maps the extension's terms to IRIs under a namespace controlled by the extension author.
-
-**Custom terms SHOULD always use a prefix** (e.g., `mobie:grid` rather than `grid`) to clearly distinguish them from core OME-NGFF terms. This prevents naming collisions and makes it immediately clear which terms are extensions.
-
-For example, the MoBIE project might publish a context at `https://mobie.github.io/context.jsonld`:
-```jsonc
-{
-    "@context": {
-        "mobie": "https://mobie.github.io/vocab#"
-    }
-}
-```
-
-This allows documents to use prefixed terms like `"@type": "mobie:Table"` or `"mobie:grid": true` when the MoBIE context is included.
+**Custom terms SHOULD always use a prefix** (e.g., `mobie:grid` rather than `grid`) to clearly distinguish them from core OME-NGFF terms.
+This prevents naming collisions and makes it immediately clear which terms are extensions.
 
 #### Extension registry
 
@@ -427,19 +446,6 @@ Extension authors SHOULD register their context URLs in a central registry (a Gi
 Registration claims maintainership for the extension namespace and provides a discoverable location for documentation.
 
 The `ome:` namespace (`https://ngff.openmicroscopy.org/vocab#`) is reserved for official extensions that have not yet been incorporated into the core specification.
-
-#### Hybrid approach: JSON-LD and OME-NGFF extensions
-
-This specification uses JSON-LD for:
-- **Type definitions** (`@type`): Node types, transformation types, axis types
-- **Identifiers** (`@id`): Unique identifiers for nodes, coordinate systems, etc.
-- **Extensibility**: Custom contexts for adding new terms
-
-The following are OME-NGFF-specific extensions that use JSON-LD syntax but are not standard JSON-LD:
-- **Path objects**: The `Path` mechanism with `@type` (zarr, json) and `path` fields
-- **External references**: Combining `@id` with a `Path` object to reference objects in external documents
-
-Path types like `zarr` and `json` are defined in the OME-NGFF context and can be extended, but the path resolution mechanism itself is specific to this specification.
 
 #### Graceful degradation
 
@@ -459,7 +465,7 @@ See more examples at https://github.com/normanrz/ngff-rfc8-collection-examples/.
 ```jsonc
 {
     "ome": {
-        "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+        "@context": "https://ngff.openmicroscopy.org/0.x/context.jsonld",
         "version": "0.6",
         "@type": "Collection",
         "name": "jrc_hela-1",
@@ -496,7 +502,7 @@ See more examples at https://github.com/normanrz/ngff-rfc8-collection-examples/.
 ```jsonc
 {
     "ome": {
-        "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+        "@context": "https://ngff.openmicroscopy.org/0.x/context.jsonld",
         "version": "0.6",
         "@type": "Collection",
         "name": "example",
@@ -550,7 +556,7 @@ Also note some MoBIE specific attributes (using prefixed keys as recommended):
 {
     "ome": {
         "@context": [
-            "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+            "https://ngff.openmicroscopy.org/0.x/context.jsonld",
             {
                 "mobie": "https://mobie.github.io/vocab#"
             }
@@ -688,7 +694,7 @@ Additional keys MAY be added, following the key naming rules.
 ```jsonc
 {
     "ome": {
-        "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+        "@context": "https://ngff.openmicroscopy.org/0.x/context.jsonld",
         "version": "0.6",
         "@type": "Collection",
         "name": "label-example",
@@ -729,7 +735,7 @@ This section defines the `plate` and `well` attributes for organizing HCS data w
 ```jsonc
 {
     "ome": {
-        "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+        "@context": "https://ngff.openmicroscopy.org/0.x/context.jsonld",
         "version": "0.6",
         "@type": "Collection",
         "name": "hcs-plate-001",
@@ -818,7 +824,7 @@ In a change from the previous specification, coordinate systems are referenced u
 ```jsonc
 {
   "ome": {
-    "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+    "@context": "https://ngff.openmicroscopy.org/0.x/context.jsonld",
     "version": "0.6",
     "@type": "Collection",
     "name": "tiled-image",
@@ -907,7 +913,7 @@ This is particularly useful for defining the nodes that are stored within a Zarr
     "node_type": "group",
     "attributes": {
         "ome": {
-            "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+            "@context": "https://ngff.openmicroscopy.org/0.x/context.jsonld",
             "version": "0.6",
             "@type": "Collection",
             "name": "zarr.json-example",
@@ -932,7 +938,7 @@ Standalone files are useful for persisting groupings of images that may or may n
 ```jsonc
 {
     "ome": {
-        "@context": "https://ngff.openmicroscopy.org/0.6/context.jsonld",
+        "@context": "https://ngff.openmicroscopy.org/0.x/context.jsonld",
         "version": "0.6",
         "@type": "Collection",
         "name": "standalone-example",
