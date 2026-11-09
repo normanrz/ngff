@@ -238,6 +238,7 @@ This is addressed in the response to comment 3 (see the corresponding section of
 This is exactly the property a reader needs in order to stop parsing the central directory early and still know that the structure of the hierarchy is complete; it does not depend on any particular order among the `zarr.json` records.
 A separate flag for breadth-first ordering was proposed during the drafting of the RFC and later removed for this reason.
 We have clarified this in the RFC (including that `jsonFirst` does not assert breadth-first order), and we have added an example.
+Since the keys under `ome` are strictly defined by the specification and are extended by future versions of it, an additional parameter describing the order of the `zarr.json` records can be added later should a use case arise; readers that do not understand it are asked to ignore it.
 
 > It would be helpful for the proposal to give an example of central directory size vs zarr.json size, to give a sense of performance gains here.
 > - For the example ozx file?
@@ -250,7 +251,6 @@ It is not much larger than `6001240.ozx`: its data are of the same order of magn
 With one shard per timepoint, channel and resolution level, the archive has 265 entries and a central directory of 19,486 bytes, of which the 7 leading `zarr.json` records take 454 bytes.
 Without sharding, the same data has 1,813 entries and a central directory of 133,678 bytes, while the `zarr.json` records still take 454 bytes.
 With `jsonFirst`, a reader therefore needs about 2% (sharded) or 0.3% (unsharded) of the central directory to discover the hierarchy, and sharding makes the central directory about seven times smaller.
-Since the keys under `ome` are strictly defined by the specification and are extended by future versions of it, an additional parameter describing the order of the `zarr.json` records can be added later should a use case arise; readers that do not understand it are asked to ignore it.
 
 #### Explicitly constrain ZIP options
 
